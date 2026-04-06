@@ -72,6 +72,11 @@ def select_court_points(image):
             display = image.copy()
 
         elif key == 13:  # Enter key
+            # Draw the closing line so the selected court looks complete.
+            if len(court_points) > 2:
+                cv2.line(display, court_points[-1], court_points[0], (255, 0, 0), 2)
+                cv2.imshow("Select Court", display)
+                cv2.waitKey(200)
             break
 
     cv2.destroyWindow("Select Court")
@@ -112,8 +117,10 @@ def detect_balls(image, court_mask, ball_colour):
     2. Converts the image to HSV colour space
     3. Thresholds the image to isolate yellow areas
     4. Cleans the mask using morphological operations
-    5. Finds contours that match expected ball size and shape
-    6. Draws bounding boxes and labels around detected balls
+    5. Finds candidate yellow blob regions using contours
+    6. Measures each region
+    7. Filters regions by size and ball-like shape
+    8. Draws the detected ball outline and center point
 
     Args:
         image: The original image as a NumPy array.
@@ -124,27 +131,35 @@ def detect_balls(image, court_mask, ball_colour):
         A tuple containing:
         - mask: The processed binary mask showing yellow regions in the court
         - result: A copy of the original image with detected balls outlined
+        - detections: A list of dictionaries describing each accepted ball
     """
     # Keep only the pixels inside the selected court.
     court_only = cv2.bitwise_and(image, image, mask=court_mask)
 
     # Convert to HSV for more reliable colour detection.
     hsv = cv2.cvtColor(court_only, cv2.COLOR_BGR2HSV)
+
+    # Threshold yellow pixels.
     mask = cv2.inRange(hsv, ball_colour["lower"], ball_colour["upper"])
 
-    # Remove small noise and close small gaps.
-    kernel = np.ones((5, 5), np.uint8)
-    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+    # Clean the mask:
+    # - Opening removes tiny yellow specks
+    # - Closing fills small holes in ball blobs
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+    #mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
 
     # Apply the court mask again to guarantee detections stay inside the court.
     mask = cv2.bitwise_and(mask, mask, mask=court_mask)
 
+    # Find candidate yellow blob regions.
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
     result = image.copy()
+    detections = []
 
     for contour in contours:
+        # Measure region size.
         area = cv2.contourArea(contour)
         if area < 20 or area > 500:
             continue
@@ -153,21 +168,53 @@ def detect_balls(image, court_mask, ball_colour):
         if perimeter == 0:
             continue
 
-        # Circularity helps filter shapes that are not ball-like.
+        # Prefer circular blobs.
         circularity = 4 * np.pi * area / (perimeter * perimeter)
         if circularity < 0.5:
             continue
 
+        # Bounding box.
         x, y, w, h = cv2.boundingRect(contour)
-        cv2.rectangle(result, (x, y), (x + w, y + h), (0, 255, 0), 2)
+
+        # Reject shapes that are too stretched.
+        aspect_ratio = w / float(h)
+        if aspect_ratio < 0.7 or aspect_ratio > 1.3:
+            continue
+
+        # Enclosing circle gives a useful center and radius estimate.
+        (xc, yc), radius = cv2.minEnclosingCircle(contour)
+        center = (int(xc), int(yc))
+        radius = int(radius)
+
+        # Ignore very tiny or very large enclosing circles if needed.
+        if radius < 3 or radius > 30:
+            continue
+
+        detections.append(
+            {
+                "center": center,
+                "radius": radius,
+                "area": area,
+                "bounding_box": (x, y, w, h),
+                "circularity": circularity,
+            }
+        )
+
+        # Draw a circle around the detected ball.
+        cv2.circle(result, center, radius, (0, 255, 0), 2)
+
+        # Mark the detected center point.
+        cv2.circle(result, center, 3, (0, 0, 255), -1)
+
+        # Optional label.
         cv2.putText(
             result,
             "Ball",
-            (x, y - 10),
+            (center[0] + 5, center[1] - 5),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.5,
             (0, 255, 0),
             2,
         )
 
-    return mask, result
+    return mask, result, detections
