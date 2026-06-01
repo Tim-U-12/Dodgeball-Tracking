@@ -211,10 +211,11 @@ __marimo__/
 
 *.pt
 
+# Local datasets
+data/
+
 # macOS metadata
 .DS_Store
 
 # Ultralytics generated outputs
 runs/
-
-data/
