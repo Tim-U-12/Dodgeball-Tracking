@@ -210,3 +210,11 @@ __marimo__/
 *.mp4
 
 *.pt
+
+# macOS metadata
+.DS_Store
+
+# Ultralytics generated outputs
+runs/
+
+data/
