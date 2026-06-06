@@ -192,6 +192,21 @@ class Tracker:
     )
     return frame
 
+  def draw_ball_marker(self, frame, bbox, color):
+    """Draw a simple circle around a detected ball."""
+    x_centre, y_centre = get_centre_of_bbox(bbox)
+    radius = max(6, int(get_bbox_width(bbox)))
+
+    cv2.circle(
+      frame,
+      center=(x_centre, y_centre),
+      radius=radius,
+      color=color,
+      thickness=2,
+      lineType=cv2.LINE_4,
+    )
+    return frame
+
 
   def draw_annotations(self, video_frames, tracks):
     output_video_frames = []
@@ -204,6 +219,10 @@ class Tracker:
       # draw players
       for track_id, player in player_dict.items():
         frame = self.draw_ellipse(frame, player["bbox"], (0,0,255), track_id)
+
+      # draw balls
+      for _, ball in ball_dict.items():
+        frame = self.draw_ball_marker(frame, ball["bbox"], (0,255,255))
     
       output_video_frames.append(frame)
     
