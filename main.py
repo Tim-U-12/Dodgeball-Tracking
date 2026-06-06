@@ -1,11 +1,17 @@
-from utils import read_video, save_video
+from trackers import Tracker
+
 
 def main():
-  # read video
-  video_frames = read_video('data/raw/videos/dodgeball.mp4')
+    # initialise Tracker
+    tracker = Tracker('models/best.pt')
 
-  # save video
-  save_video(video_frames, 'output_videos/output_video.mp4')
+    # Track, annotate, and save the video without loading every frame into memory.
+    tracker.process_video(
+        input_video_path='data/raw/videos/dodgeball.mp4',
+        output_video_path='output_videos/output_video.mp4',
+        read_from_stub=True,
+        stub_path='stubs/track_stubs.pkl',
+    )
 
 if __name__ == "__main__":
-  main()
+    main()
